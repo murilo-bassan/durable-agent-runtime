@@ -1,10 +1,14 @@
 // runloop — operator console for the durable agent runtime. Vanilla JS, no build.
 
 const root = document.getElementById("root");
-const state = { selected: null, owner: "ana", runs: [], approvals: [], metrics: null, steps: [], run: null };
+const OWNERS = ["ana", "bruno", "carla"];
+const state = { selected: null, owner: "ana", budget: null, runs: [], approvals: [], metrics: null, steps: [], run: null };
 
 // ------------------------------------------------------------------ i18n (EN source strings are the keys)
 const PT = {
+ "run": "execução",
+ "new runs are submitted as, and charged to, this owner": "novas execuções são criadas por este dono e cobradas do orçamento dele",
+ "token budget left in the last 24h": "orçamento de tokens restante nas últimas 24h",
  "Queue depth": "Tamanho da fila",
  "Running": "Rodando",
  "Awaiting human": "Aguardando humano",
@@ -45,7 +49,7 @@ const PT = {
 let lang = (() => { try { return localStorage.getItem("lang"); } catch { return null; } })()
   || ((navigator.language || "").toLowerCase().startsWith("pt") ? "pt" : "en");
 const t = (s) => (lang === "pt" && PT[s]) || s;
-function setLang(l) { lang = l; try { localStorage.setItem("lang", l); } catch {} document.documentElement.lang = l === "pt" ? "pt-BR" : "en"; formCard = typeof formCard === "undefined" ? undefined : null; render(); }
+function setLang(l) { lang = l; try { localStorage.setItem("lang", l); } catch {} document.documentElement.lang = l === "pt" ? "pt-BR" : "en"; formCard = null; render(); }
 function langToggle() {
   return h("span", { class: "lang" }, ["en", "pt"].map((l) => h("button", { class: lang === l ? "on" : "", onclick: () => setLang(l) }, l.toUpperCase())));
 }
@@ -87,15 +91,17 @@ const STATUS = {
 };
 const since = (iso) => {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  return s < 60 ? `${s.toFixed(0)}s ago` : s < 3600 ? `${(s / 60).toFixed(0)}m ago` : `${(s / 3600).toFixed(1)}h ago`;
+  const v = s < 60 ? `${s.toFixed(0)}s` : s < 3600 ? `${(s / 60).toFixed(0)}min` : `${(s / 3600).toFixed(1)}h`;
+  return lang === "pt" ? `há ${v}` : `${v} ago`;
 };
 const short = (id) => id.slice(0, 8);
 
 // ------------------------------------------------------------------ data
 
 async function refresh() {
-  const [runs, approvals, metrics] = await Promise.all([api("/v1/runs?limit=40"), api("/v1/approvals"), api("/v1/metrics")]);
-  Object.assign(state, { runs, approvals, metrics });
+  const [runs, approvals, metrics, budget] = await Promise.all([api("/v1/runs?limit=40"), api("/v1/approvals"), api("/v1/metrics"),
+    api(`/v1/budget/${state.owner}`)]);
+  Object.assign(state, { runs, approvals, metrics, budget: budget.remaining_tokens_24h });
   if (state.selected) {
     [state.run, state.steps] = await Promise.all([api(`/v1/runs/${state.selected}`), api(`/v1/runs/${state.selected}/steps`)]);
   }
@@ -110,7 +116,7 @@ async function submit(form) {
   try {
     const run = await api("/v1/runs", { method: "POST", body, headers: { "Idempotency-Key": crypto.randomUUID() } });
     state.selected = run.id;
-    toast(`run ${short(run.id)} queued`);
+    toast(`${t("run")} ${short(run.id)} ${t("queued")}`);
     refresh();
   } catch (e) { toast(e.message, true); }
 }
@@ -118,7 +124,7 @@ async function submit(form) {
 async function decide(a, approve) {
   try {
     await api(`/v1/approvals/${a.id}`, { method: "POST", body: { approve, decided_by: "operator", note: approve ? "" : "rejected in console" } });
-    toast(approve ? "approved — run requeued" : t("rejected — agent will adapt"));
+    toast(approve ? t("approved — run requeued") : t("rejected — agent will adapt"));
     refresh();
   } catch (e) { toast(e.message, true); }
 }
@@ -165,7 +171,7 @@ function runList() {
     },
       h("span", { class: "mono" }, `${r.input.quantity}× ${r.input.item}`),
       h("span", { class: STATUS[r.status] }, t(r.status.replace("_", " "))),
-      h("span", { class: "hash" }, `${short(r.id)} · ${t("attempt")} ${r.attempts} · ${since(r.created_at)}`),
+      h("span", { class: "hash" }, `${short(r.id)} · ${r.owner} · ${t("attempt")} ${r.attempts} · ${since(r.created_at)}`),
       h("span", { class: "hash" }, r.tokens_in + r.tokens_out ? `${r.tokens_in + r.tokens_out} tok` : ""))) : h("div", { class: "empty" }, t("No runs yet.")));
 }
 
@@ -208,7 +214,7 @@ function stepItem(s) {
 function detail() {
   const r = state.run;
   if (!r) return h("section", { class: "card empty" }, t("Select a run to see its step timeline."));
-  const live = !["succeeded", t("failed"), t("cancelled"), "dead"].includes(r.status);
+  const live = !["succeeded", "failed", "cancelled", "dead"].includes(r.status);
   return h("section", { class: "card" },
     h("header", {},
       h("div", {}, h("div", { class: "label" }, `run ${r.id}`), h("div", { class: "mono" }, `${r.agent} · prompt ${r.prompt_name} v${r.prompt_version} · ${r.model}`)),
@@ -223,13 +229,25 @@ function detail() {
       state.steps.length ? h("div", { class: "timeline" }, state.steps.map(stepItem)) : h("div", { class: "muted" }, t("waiting for a worker…"))));
 }
 
+let ownerEl = null; // built once, like the form: a re-render must not close an open dropdown
+function ownerSelect() {
+  if (ownerEl) { ownerEl.title = t("new runs are submitted as, and charged to, this owner"); return ownerEl; }
+  ownerEl = h("select", { class: "owner", onchange: (e) => { state.owner = e.target.value; refresh(); } },
+    OWNERS.map((o) => h("option", { value: o }, o)));
+  ownerEl.value = state.owner;
+  return ownerSelect();
+}
+
 function render() {
   root.replaceChildren(h("div", { class: "main" },
     h("div", { class: "topbar" },
       h("div", { class: "row", style: "gap:14px" },
         h("div", { class: "brand-mark" }, h("i"), h("i"), h("i"), h("i")),
         h("div", {}, h("div", { class: "label" }, t("durable agent runtime")), h("h1", {}, "runloop"))),
-      h("div", { class: "row" }, langToggle(), h("span", { class: "label" }, t("owner")), h("span", { class: "chip ok" }, state.owner),
+      h("div", { class: "row" }, langToggle(), h("span", { class: "label" }, t("owner")),
+        ownerSelect(),
+        state.budget != null ? h("span", { class: "chip ok", title: t("token budget left in the last 24h") },
+          `${new Intl.NumberFormat().format(state.budget)} tok`) : null,
         h("a", { class: "btn ghost", href: "/docs", target: "_blank" }, t("API docs")))),
     h("div", { class: "content" }, kpis(),
       h("div", { class: "grid split", style: "grid-template-columns:380px minmax(0,1fr)" },

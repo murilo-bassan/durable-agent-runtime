@@ -299,3 +299,5 @@ pre.json {
 .lang { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
 .lang button { border: 0; background: transparent; color: var(--muted); padding: 5px 10px; font: 500 11.5px var(--mono); cursor: pointer; }
 .lang button.on { background: var(--accent); color: #000; }
+
+select.owner { width: auto; height: 30px; padding: 0 8px; font: 12px var(--mono); }
