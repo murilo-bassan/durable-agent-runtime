@@ -1,0 +1,12 @@
+[project]
+name = "durable-agent-runtime"
+version = "0.1.0"
+description = "Agents that survive crashes, respect token budgets and ask a human before they write."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Murilo Bassan" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
