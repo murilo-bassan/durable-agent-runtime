@@ -98,7 +98,7 @@ WITH candidate AS (
     LIMIT 1
 )
 UPDATE runs SET status = 'running', worker_id = %(worker)s, heartbeat_at = now(),
-                started_at = COALESCE(started_at, now()), attempts = attempts + 1
+                started_at = COALESCE(started_at, now())
 FROM candidate WHERE runs.id = candidate.id
 RETURNING runs.*
 """
@@ -139,7 +139,8 @@ def recover_stale(stale_after_s: float, max_attempts: int) -> dict[str, list[str
                             (db.json({"reason": "max_attempts", "attempts": r["attempts"]}), r["id"]))
                 dead.append(str(r["id"]))
             else:
-                cur.execute("UPDATE runs SET status = 'queued', worker_id = NULL WHERE id = %s", (r["id"],))
+                cur.execute("UPDATE runs SET status = 'queued', worker_id = NULL, attempts = attempts + 1 WHERE id = %s",
+                            (r["id"],))
                 requeued.append(str(r["id"]))
     return {"requeued": requeued, "dead": dead}
 

@@ -47,6 +47,16 @@ def test_rejection_tries_next_quote_then_stops(goal):
     assert "rejected" in runs.get(c.id)["result"]["answer"]
 
 
+def test_pausing_for_approval_does_not_burn_attempts(goal):
+    c = start(goal)
+    agent_loop.execute(c, "w1", ScriptedPlanner())
+    for _ in range(2):
+        approvals.decide(str(approvals.pending()[0]["id"]), False, "manager")
+        agent_loop.execute(resume(), "w1", ScriptedPlanner())
+    run = runs.get(c.id)
+    assert run["status"] == "succeeded" and run["attempts"] == 1
+
+
 def test_approval_is_bound_to_exact_arguments(goal):
     c = start(goal)
     agent_loop.execute(c, "w1", ScriptedPlanner())

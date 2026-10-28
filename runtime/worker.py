@@ -64,7 +64,7 @@ class Worker:
         detail = {"reason": "error", "type": type(error).__name__, "message": str(error)[:300]}
         with db.tx() as cur:
             if claimed.attempts < self.settings.max_attempts:
-                cur.execute("UPDATE runs SET status = 'queued', worker_id = NULL, error = %s "
+                cur.execute("UPDATE runs SET status = 'queued', worker_id = NULL, error = %s, attempts = attempts + 1 "
                             "WHERE id = %s AND worker_id = %s AND status = 'running'",
                             (db.json(detail), claimed.id, slot_id))
             else:
@@ -132,6 +132,7 @@ def main() -> None:
     while not worker.stop.is_set():
         time.sleep(0.5)
     worker.join(timeout=30)
+    db.close()
 
 
 if __name__ == "__main__":
