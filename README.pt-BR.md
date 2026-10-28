@@ -25,11 +25,10 @@ longo que **vai** encontrar um deploy, um OOM kill, um 429 do provedor, um
 humano que leva três horas para aprovar e um usuário que clica duas vezes em
 "enviar". Este repositório é o runtime que torna tudo isso rotina.
 
-> Roda totalmente offline: o modelo padrão é um planner determinístico, então
-> todo teste, demo e teste de caos é reproduzível sem chave de API. Aponte
-> `LLM_PROVIDER=openai` para qualquer endpoint compatível com OpenAI
-> (OpenRouter, vLLM, Ollama) para usar um modelo real; a chave vem do seu
-> ambiente, nunca do repositório.
+> Agnóstico de modelo: `LLM_PROVIDER=openai` aponta o agente para qualquer endpoint
+> compatível com OpenAI (OpenAI, OpenRouter, vLLM, Ollama), com a chave lida do ambiente,
+> nunca do repositório. Atrás da mesma interface, um planner de referência determinístico
+> torna todo teste, demo e teste de caos exatamente reproduzível.
 
 ## Garantias, e como são testadas
 

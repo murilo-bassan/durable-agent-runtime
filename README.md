@@ -25,10 +25,10 @@ long-lived job that **will** meet a deploy, an OOM kill, a provider 429, a
 human who takes three hours to approve, and a user who clicks "submit" twice.
 This repository is the runtime that makes those boring.
 
-> Runs fully offline: the default model is a deterministic planner, so every
-> test, demo and chaos drill is reproducible with no API key. Point
-> `LLM_PROVIDER=openai` at any OpenAI-compatible endpoint (OpenRouter, vLLM,
-> Ollama) to use a real model — the key comes from your environment, never the repo.
+> Model-agnostic: `LLM_PROVIDER=openai` points the agent at any OpenAI-compatible
+> endpoint (OpenAI, OpenRouter, vLLM, Ollama), with the key read from the environment,
+> never the repo. Behind the same interface, a deterministic reference planner makes
+> every test, demo and chaos drill exactly reproducible.
 
 ## Guarantees, and how they are tested
 
