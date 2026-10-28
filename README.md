@@ -10,7 +10,7 @@ Postgres queue (`SKIP LOCKED`) · resumable transcripts · exactly-once side eff
 ![tests](https://img.shields.io/badge/tests-29%20%2B%20chaos%20drill-000?style=flat-square&labelColor=000&color=c6ff00)
 ![license](https://img.shields.io/badge/license-MIT-000?style=flat-square&labelColor=000&color=2a2a2a)
 
-[English](#english) · [Português](#português)
+**English** · [Português](README.pt-BR.md)
 
 <img src="docs/screenshots/run-full.png" alt="runloop console" width="100%">
 
@@ -18,9 +18,7 @@ Postgres queue (`SKIP LOCKED`) · resumable transcripts · exactly-once side eff
 
 ---
 
-## English
-
-### The problem
+## The problem
 
 A demo agent is a `while` loop in one process. A production agent is a
 long-lived job that **will** meet a deploy, an OOM kill, a provider 429, a
@@ -32,7 +30,7 @@ This repository is the runtime that makes those boring.
 > `LLM_PROVIDER=openai` at any OpenAI-compatible endpoint (OpenRouter, vLLM,
 > Ollama) to use a real model — the key comes from your environment, never the repo.
 
-### Guarantees, and how they are tested
+## Guarantees, and how they are tested
 
 | Guarantee | Mechanism | Proof |
 |---|---|---|
@@ -48,7 +46,7 @@ This repository is the runtime that makes those boring.
 | Cancel works mid-run | cooperative flag checked at every checkpoint | `test_cancel_is_honored_at_next_checkpoint` |
 | A stale worker cannot corrupt a run | every write is `WHERE worker_id = me AND status = 'running'` | `test_writes_after_losing_ownership_fail` |
 
-### Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -75,7 +73,7 @@ queued ──claim──► running ──► succeeded | failed | cancelled
   └── decision ◄── waiting_approval
 ```
 
-### Quick start
+## Quick start
 
 ```bash
 git clone https://github.com/murilo-bassan/durable-agent-runtime.git
@@ -91,9 +89,11 @@ python scripts/demo.py                          # approve / reject / cancel / no
 # → http://localhost:8700 (console) · http://localhost:8700/docs (OpenAPI)
 ```
 
+In the console, the **owner** selector decides who submits new runs and shows that owner's remaining token budget. The UI switches between EN and PT-BR.
+
 Full stack with two competing worker processes: `docker compose up --build`.
 
-### API
+## API
 
 | Method | Path | |
 |---|---|---|
@@ -104,7 +104,7 @@ Full stack with two competing worker processes: `docker compose up --build`.
 | `GET/POST` | `/v1/prompts/{name}` | versions; publish (identical text is a no-op) |
 | `GET` | `/v1/metrics` · `/v1/budget/{owner}` | queue depth, oldest age, p50/p95, tokens; remaining budget |
 
-### Chaos drill output
+## Chaos drill output
 
 ```
 enqueued 24 runs
@@ -113,7 +113,7 @@ succeeded 24/24 · runs that needed a retry: 4 · purchase orders: 24
 chaos drill passed ✓
 ```
 
-### Decisions
+## Decisions
 
 - [0001 — Postgres is the queue](docs/adr/0001-postgres-as-the-queue.md)
 - [0002 — At-least-once steps, exactly-once effects](docs/adr/0002-at-least-once-with-idempotent-effects.md)
@@ -123,35 +123,6 @@ chaos drill passed ✓
 | Rejected twice, agent adapts | Operator console |
 |---|---|
 | <img src="docs/screenshots/rejected-full.png" alt="rejection flow"> | <img src="docs/screenshots/console.png" alt="console"> |
-
----
-
-## Português
-
-### O problema
-
-Um agente de demo é um `while` num processo só. Um agente em produção é um
-job longo que **vai** encontrar um deploy, um OOM kill, um 429 do provedor, um
-humano que leva três horas para aprovar e um usuário que clica duas vezes em
-"enviar". Este repositório é o runtime que torna tudo isso trivial.
-
-### O que garante
-
-- **Nenhum run é pego duas vezes**: fila no próprio Postgres com `FOR UPDATE SKIP LOCKED`.
-- **Worker morto não perde trabalho**: heartbeat, recuperação de runs travados e retomada a partir do transcript salvo. O `scripts/chaos.py` mata um processo worker no meio e prova que tudo termina.
-- **Retentativa não duplica efeito**: tools de escrita executam uma vez por `run:chamada` (`side_effects` com advisory lock).
-- **Orçamento de tokens não estoura em concorrência**: reserva → liquidação/liberação num ledger com lock de linha.
-- **Aprovação humana vale só para os argumentos aprovados**: hash da ação, consumo único, expiração; esperar humano não ocupa worker.
-- **Prompts versionados no banco**: cada run fica preso à versão com que começou.
-- **Idempotency-Key** na criação de runs, **SSE** para acompanhar ao vivo, **cancelamento** cooperativo.
-
-Roda 100% offline com um planner determinístico; para usar um modelo real, `LLM_PROVIDER=openai` e a chave no seu ambiente — nunca no repositório.
-
-```bash
-docker compose up -d db && pip install -r requirements-dev.txt
-python -m pytest && python scripts/chaos.py
-RUNTIME_EMBEDDED_WORKER=true python -m uvicorn runtime.api:app --port 8700
-```
 
 ---
 
