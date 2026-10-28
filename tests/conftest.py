@@ -9,12 +9,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from runtime import agents, config, db  # noqa: E402
 
-TEST_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://runtime:runtime@localhost:55432/runtime")
+# Tests get their own database: they drop the schema on every test, which must never
+# touch the database a running API/worker (demo, dev) is using.
+ADMIN_URL = os.environ.get("TEST_ADMIN_DATABASE_URL", "postgresql://runtime:runtime@localhost:55432/runtime")
+TEST_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://runtime:runtime@localhost:55432/runtime_test")
 
 
 def _reachable() -> bool:
     try:
-        psycopg.connect(TEST_URL, connect_timeout=3).close()
+        with psycopg.connect(ADMIN_URL, connect_timeout=3, autocommit=True) as conn:
+            name = TEST_URL.rsplit("/", 1)[1]
+            if not conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone():
+                conn.execute(f'CREATE DATABASE "{name}"')
         return True
     except psycopg.OperationalError:
         return False
