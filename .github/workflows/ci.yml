@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: runtime
+          POSTGRES_PASSWORD: runtime
+          POSTGRES_DB: runtime
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U runtime" --health-interval 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest
+      - name: chaos drill (kill a worker process mid-flight)
+        run: |
+          python -c "import psycopg; c=psycopg.connect('postgresql://runtime:runtime@localhost:55432/runtime', autocommit=True); c.execute('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')"
+          python scripts/chaos.py

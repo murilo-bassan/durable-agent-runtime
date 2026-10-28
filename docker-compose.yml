@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: runtime
+      POSTGRES_PASSWORD: runtime
+      POSTGRES_DB: runtime
+    ports: ["127.0.0.1:55432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U runtime"]
+      interval: 2s
+      retries: 30
+    volumes: [pgdata:/var/lib/postgresql/data]
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://runtime:runtime@db:5432/runtime
+    ports: ["127.0.0.1:8700:8700"]
+    depends_on: { db: { condition: service_healthy } }
+
+  # Two independent worker processes competing for the same queue (SKIP LOCKED).
+  worker:
+    build: .
+    command: ["python", "-m", "runtime.worker"]
+    environment:
+      DATABASE_URL: postgresql://runtime:runtime@db:5432/runtime
+      WORKER_SLOTS: "4"
+      # LLM_PROVIDER: openai      # + LLM_API_KEY from your shell; default is the offline planner
+    depends_on: { db: { condition: service_healthy }, api: { condition: service_started } }
+    deploy: { replicas: 2 }
+    stop_grace_period: 30s
+
+volumes:
+  pgdata:
