@@ -27,6 +27,7 @@ class Reservation:
     owner: str
     run_id: str
     tokens: int
+    ledger_id: int
 
 
 def ensure_owner(cur, owner: str) -> dict:
@@ -58,24 +59,33 @@ def reserve(owner: str, run_id: str, tokens: int) -> Reservation:
         remaining = budget["daily_tokens"] - _used(cur, owner)
         if tokens > remaining:
             raise BudgetExceeded(owner, tokens, remaining)
-        cur.execute("INSERT INTO token_ledger (owner, run_id, kind, tokens) VALUES (%s, %s, 'reserved', %s)",
+        cur.execute("INSERT INTO token_ledger (owner, run_id, kind, tokens) VALUES (%s, %s, 'reserved', %s) RETURNING id",
                     (owner, run_id, tokens))
-    return Reservation(owner, run_id, tokens)
+        ledger_id = int(cur.fetchone()["id"])
+    return Reservation(owner, run_id, tokens, ledger_id)
 
 
 def settle(reservation: Reservation, actual: int) -> None:
-    """Replaces the reservation by the real usage: release all of it, record what was spent."""
+    """Finalize once: release the reservation and record its real usage atomically."""
     with db.tx() as cur:
-        cur.execute("INSERT INTO token_ledger (owner, run_id, kind, tokens) VALUES (%s, %s, 'released', %s), "
-                    "(%s, %s, 'settled', %s)",
-                    (reservation.owner, reservation.run_id, reservation.tokens,
-                     reservation.owner, reservation.run_id, actual))
+        cur.execute("""WITH closed AS (
+            INSERT INTO token_ledger (owner, run_id, kind, tokens, reservation_id)
+            VALUES (%s, %s, 'released', %s, %s)
+            ON CONFLICT (reservation_id) WHERE kind = 'released' DO NOTHING
+            RETURNING id
+        )
+        INSERT INTO token_ledger (owner, run_id, kind, tokens, reservation_id)
+        SELECT %s, %s, 'settled', %s, %s FROM closed""",
+                    (reservation.owner, reservation.run_id, reservation.tokens, reservation.ledger_id,
+                     reservation.owner, reservation.run_id, actual, reservation.ledger_id))
 
 
 def release(reservation: Reservation) -> None:
     with db.tx() as cur:
-        cur.execute("INSERT INTO token_ledger (owner, run_id, kind, tokens) VALUES (%s, %s, 'released', %s)",
-                    (reservation.owner, reservation.run_id, reservation.tokens))
+        cur.execute("""INSERT INTO token_ledger (owner, run_id, kind, tokens, reservation_id)
+            VALUES (%s, %s, 'released', %s, %s)
+            ON CONFLICT (reservation_id) WHERE kind = 'released' DO NOTHING""",
+                    (reservation.owner, reservation.run_id, reservation.tokens, reservation.ledger_id))
 
 
 def remaining(owner: str) -> int:
